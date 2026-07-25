@@ -1,0 +1,22 @@
+[project]
+name = "ai-powered-website-audit-tool"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "fastapi[standard]>=0.140.0",
+    "google-genai>=2.14.0",
+    "httpx>=0.28.1",
+    "lxml>=6.1.1",
+    "pydantic-settings>=2.14.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
