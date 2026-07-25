@@ -21,19 +21,8 @@ def log_call(
     raw_output: str,
     parsed_output: BaseModel,
 ) -> Path | None:
-    """Write one record of a successful model call to logs/, as plain text.
-
-    Required deliverable: visibility into the system prompt, the constructed
-    user prompt, the schema enforced on the model's output, and the raw
-    output before it's parsed and merged into the final response. Plain text
-    with labeled sections rather than a JSON envelope, so prompts read with
-    real line breaks instead of escaped `\\n`, and the schema is referenced by
-    name rather than its full JSON Schema dump (static per schema, not
-    per-call information, and mostly `$defs` noise in a log meant to be
-    skimmed).
-
-    Never raises. A log write that fails — read-only filesystem, full disk —
-    must not fail an audit that otherwise succeeded.
+    """
+    Write one record of a successful model call to logs/, as plain text.
     """
     timestamp = datetime.now(timezone.utc)
     filename = f"{timestamp.strftime('%Y%m%dT%H%M%S')}_{uuid4().hex[:8]}.log"

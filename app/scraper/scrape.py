@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from app.schemas import FactualMetricsSchema
 from app.scraper.fetch import fetch_html
 from app.scraper.metrics import extract_metrics
-from app.scraper.parser import extract_visible_text, parse_html
+from app.scraper.parser import parse_html, strip_chrome, text_from_scope
 
 
 @dataclass
@@ -23,30 +23,15 @@ async def scrape_page(url: str) -> ScrapedPage:
     """Fetch and parse a URL into factual metrics + page content.
 
     The single entry point into the scraper subsystem — callers only need
-    this function, not the individual fetch/parse/metrics pieces.
+    this function, not the individual fetch/parse/metrics pieces. Scopes the
+    page to its real content once (see strip_chrome) and reuses that scope
+    for both metrics and content, rather than re-deriving it per output.
     """
     html = await fetch_html(url)
     soup = parse_html(html)
+    content_soup = strip_chrome(soup)
 
     return ScrapedPage(
-        metrics=extract_metrics(soup, url),
-        content=extract_visible_text(soup),
+        metrics=extract_metrics(content_soup, url),
+        content=text_from_scope(content_soup),
     )
-
-if __name__ == "__main__":
-
-    """ uv run -m app.scraper.scrape """
- 
-    import asyncio
-    import sys
-
-    url = "https://learn.deeplearning.ai/courses/a2a-the-agent2agent-protocol/lesson/vtf72ap4/introduction"
-
-    try:
-        scraped_page = asyncio.run(scrape_page(url))
-        print("Metrics:")
-        print(scraped_page.metrics.model_dump_json(indent=2))
-        # print("Content:", scraped_page.content)
-    except Exception as e:
-        print(f"Error scraping {url}: {e}")
-        sys.exit(1)

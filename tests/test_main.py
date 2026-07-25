@@ -28,7 +28,7 @@ def test_audit_returns_the_assembled_output_on_success(monkeypatch, make_output)
     assert response.status_code == 200
     body = response.json()
     assert body["factual_metrics"]["total_word_count"] == output.factual_metrics.total_word_count
-    assert len(body["recommendations"]["recommendation"]) == 3
+    assert len(body["recommendations"]) == 3
 
 
 def test_audit_maps_fetch_error_to_422(monkeypatch):

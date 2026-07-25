@@ -13,7 +13,6 @@ from app.schemas import (
     InsightSchema,
     OutputSchema,
     RecommendationReasoningSchema,
-    RecommendationSchema,
 )
 
 
@@ -34,7 +33,9 @@ def make_metrics():
             image_missing_alt_count=1,
             image_decorative_alt_count=1,
             meta_title="Sample",
+            meta_title_length=len("Sample"),
             meta_description="A sample page.",
+            meta_description_length=len("A sample page."),
         )
         defaults.update(overrides)
         return FactualMetricsSchema(**defaults)
@@ -64,15 +65,13 @@ def make_insights():
 
 @pytest.fixture
 def make_recommendations():
-    def _make(count: int = 3) -> RecommendationSchema:
-        return RecommendationSchema(
-            recommendation=[
-                RecommendationReasoningSchema(
-                    recommendation=f"Do thing {i}", reasoning=f"Because metric {i}"
-                )
-                for i in range(count)
-            ]
-        )
+    def _make(count: int = 3) -> list[RecommendationReasoningSchema]:
+        return [
+            RecommendationReasoningSchema(
+                recommendation=f"Do thing {i}", reasoning=f"Because metric {i}"
+            )
+            for i in range(count)
+        ]
 
     return _make
 

@@ -1,11 +1,13 @@
+import pytest
+
 from app.scraper.metrics import extract_metrics
-from app.scraper.parser import parse_html
+from app.scraper.parser import parse_html, strip_chrome
 
 SOURCE_URL = "https://www.example.com/page"
 
 
 def metrics_for(html: str, source_url: str = SOURCE_URL):
-    return extract_metrics(parse_html(html), source_url)
+    return extract_metrics(strip_chrome(parse_html(html)), source_url)
 
 
 def test_heading_counts():
@@ -176,6 +178,7 @@ def test_image_alt_counts_distinguish_missing_from_decorative():
     assert metrics.image_count == 3
     assert metrics.image_missing_alt_count == 1
     assert metrics.image_decorative_alt_count == 1
+    assert metrics.image_missing_alt_percent == pytest.approx(33.3)
 
 
 def test_image_alt_counts_are_zero_with_no_images():
@@ -184,6 +187,7 @@ def test_image_alt_counts_are_zero_with_no_images():
     assert metrics.image_count == 0
     assert metrics.image_missing_alt_count == 0
     assert metrics.image_decorative_alt_count == 0
+    assert metrics.image_missing_alt_percent == 0
 
 
 def test_meta_title_and_description_are_extracted_and_trimmed():
@@ -196,11 +200,15 @@ def test_meta_title_and_description_are_extracted_and_trimmed():
     metrics = metrics_for(html)
 
     assert metrics.meta_title == "Page Title"
+    assert metrics.meta_title_length == len("Page Title")
     assert metrics.meta_description == "Page summary."
+    assert metrics.meta_description_length == len("Page summary.")
 
 
 def test_meta_title_and_description_default_to_empty_string_when_missing():
     metrics = metrics_for("<p>No head metadata here.</p>")
 
     assert metrics.meta_title == ""
+    assert metrics.meta_title_length == 0
     assert metrics.meta_description == ""
+    assert metrics.meta_description_length == 0

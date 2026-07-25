@@ -153,6 +153,10 @@
     margin-top: 0.35rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
+  .citation-unverified {
+    color: var(--error);
+    font-weight: 600;
+  }
 
   ol.reco-list {
     margin: 0;
@@ -242,7 +246,7 @@ function renderMetrics(metrics) {
     ["Internal links", `${metrics.internal_links_count} (${metrics.unique_internal_links_count} unique)`],
     ["External links", `${metrics.external_links_count} (${metrics.unique_external_links_count} unique)`],
     ["Images", metrics.image_count],
-    ["Images missing alt text", metrics.image_missing_alt_count],
+    ["Images missing alt text", `${metrics.image_missing_alt_count} (${metrics.image_missing_alt_percent}%)`],
     ["Images with decorative alt (alt=\"\")", metrics.image_decorative_alt_count],
     ["Meta title", metrics.meta_title || "(missing)"],
     ["Meta description", metrics.meta_description || "(missing)"],
@@ -288,7 +292,14 @@ function renderInsights(insights) {
     if (cited && cited.length) {
       const citations = document.createElement("div");
       citations.className = "insight-citations";
-      citations.textContent = `Based on: ${cited.join(", ")}`;
+      citations.append("Based on: ");
+      cited.forEach((citation, i) => {
+        const span = document.createElement("span");
+        span.textContent = citation;
+        if (citation.endsWith("(unverified)")) span.className = "citation-unverified";
+        citations.append(span);
+        if (i < cited.length - 1) citations.append(", ");
+      });
       block.append(citations);
     }
 
@@ -302,7 +313,7 @@ function renderRecommendations(recommendations) {
   const list = document.getElementById("reco-list");
   list.innerHTML = "";
 
-  for (const item of recommendations.recommendation) {
+  for (const item of recommendations) {
     const li = document.createElement("li");
     const action = document.createElement("div");
     action.className = "reco-action";

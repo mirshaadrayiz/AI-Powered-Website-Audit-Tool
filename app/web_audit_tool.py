@@ -2,10 +2,30 @@ import logging
 
 from app.llm.client import generate_structured
 from app.llm.prompts import SYSTEM_PROMPT, build_user_prompt
-from app.schemas import AIAnalysisSchema, OutputSchema
+from app.schemas import AIAnalysisSchema, FactualMetricsSchema, InsightSchema, OutputSchema
 from app.scraper.scrape import scrape_page
 
 logger = logging.getLogger(__name__)
+
+
+def _verify_citations(insights: InsightSchema, metrics: FactualMetricsSchema) -> None:
+    """Flag any metrics_cited entry that doesn't match the real scraped value.
+
+    """
+    facts = metrics.model_dump()
+    for field_name in type(insights).model_fields:
+        detail = getattr(insights, field_name)
+        flagged = []
+        for citation in detail.metrics_cited:
+            field_path, _, claimed_value = citation.partition(":")
+            value = facts
+            for part in field_path.strip().split("."):
+                value = value.get(part) if isinstance(value, dict) else None
+            if value is not None and str(value) == claimed_value.strip():
+                flagged.append(citation)
+            else:
+                flagged.append(f"{citation} (unverified)")
+        detail.metrics_cited = flagged
 
 
 async def audit_website(url: str) -> OutputSchema:
@@ -23,6 +43,7 @@ async def audit_website(url: str) -> OutputSchema:
         user_prompt=user_prompt,
         schema=AIAnalysisSchema,
     )
+    _verify_citations(analysis.insights, scraped_page.metrics)
 
     output = OutputSchema(
         factual_metrics=scraped_page.metrics,

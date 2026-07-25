@@ -10,6 +10,9 @@ single-page web UI, and a CLI.
 
 The core idea: keep facts and AI opinions separate. Metrics are computed by deterministic code; the
 AI layer only interprets what the code already measured, and never invents or overwrites a number.
+Every citation the model attaches to an insight (e.g. `total_word_count: 263`) is checked against
+the real `FactualMetricsSchema` value after the call returns; a citation that doesn't match is still
+shown, but flagged as unverified rather than presented as grounded.
 
 ## Architecture
 
@@ -142,7 +145,7 @@ input and output.
 
 - **Metrics are computed deterministically, not by the model.** Counts such as words, headings, links, and CTAs come directly from the scraper. The AI layer only interprets these facts, preventing the model from inventing or changing measurements.
 
-- **Insights are grounded in metrics.** Every insight and recommendation includes the exact metric fields it is based on. This keeps the reasoning traceable, although validation is currently enforced at the prompt level rather than checked in code.
+- **Insights are grounded in metrics, and citations are checked, not just requested.** Every insight cites the metric field(s) it's based on. After the model responds, each citation is parsed and checked against the real metrics, a citation that doesn't match is flagged as unverified rather than dropped or silently trusted.
 
 - **The model is tuned for consistent output.** Temperature 0 and structured output keep audits reproducible. The model is used for interpretation and recommendations, not open-ended generation.
 
@@ -185,9 +188,7 @@ live Gemini API.
 
 - **Deepen the scraper's page-structure heuristics.** CTA detection, hidden-content detection, and chrome removal (see Limitations) are all heuristic, built under a 24-hour deadline rather than a full survey of how modern sites are actually structured. Studying real-world markup patterns more broadly and encoding what's learned directly into the parser would close these gaps without giving up the scraper's determinism.
 
-- **Verify citations in code.** Grounding is currently enforced only by the prompt; nothing checks a citation against the actual metrics.
-  - *Detecting* a mismatch is cheap: every citation is already `"field_name: value"`, so validation is just a lookup and comparison.
-  - *Fixing* a mismatch requires re-calling the model with the discrepancy as feedback, doubling the request cost against the free-tier quota. Exact matching should also be done carefully without wasting API calls.
+- **Auto-correct flagged citations instead of just marking them.** Citation verification (see Design decisions) currently flags a mismatched citation as unverified rather than fixing it — the caller still sees it, just labeled untrustworthy. Re-calling the model with the specific discrepancy as feedback could recover a corrected citation instead, at the cost of a second request against the free-tier quota.
 
 - **Validate prompt injection in code, not just in the prompt.** The current defense is a system-prompt rule telling the model to treat page content as data rather than instructions. Since the tool audits arbitrary third-party webpages, a malicious page can deliberately include prompt-injection attempts. A more robust approach would scan scraped content for known injection patterns before it reaches the model and flag outputs that look suspiciously influenced, rather than relying solely on prompt instructions.
 
