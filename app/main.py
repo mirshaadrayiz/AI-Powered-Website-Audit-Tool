@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -7,6 +8,8 @@ from app.llm.client import AIError
 from app.schemas import InputSchema, OutputSchema
 from app.scraper.fetch import FetchError
 from app.web_audit_tool import audit_website
+
+logging.basicConfig(level=logging.INFO)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
