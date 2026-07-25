@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.git
+.env
+logs
+tests
+services
+utils
+uv.lock.bak
