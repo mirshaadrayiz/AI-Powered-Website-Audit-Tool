@@ -11,10 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     gemini_api_key: str
-    # "latest" alias, not a pinned version — avoids the model-retirement
-    # whiplash of hardcoding a specific snapshot. Override via GEMINI_MODEL
-    # in .env to pin a specific version instead.
-    gemini_model: str = "gemini-flash-latest"
+    gemini_model: str = "gemini-3.6-flash"
 
 
 settings = Settings()

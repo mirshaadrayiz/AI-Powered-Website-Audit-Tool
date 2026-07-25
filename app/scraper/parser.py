@@ -3,25 +3,15 @@ import re
 
 from bs4 import BeautifulSoup
 
-# Markup that isn't rendered in the page body at all. <head> is included
-# because none of its children (title, meta, link) render as body content.
-# Only relevant to text extraction: script/style hold raw JS/CSS text, not
-# real markup, so unlike FALLBACK_CONTENT_TAGS they can't produce a stray
-# <h1>/<a>/<img> and don't need stripping from the shared metrics scope.
+# Markup that isn't rendered in the page body at all. 
 MARKUP_NOISE_TAGS = ["head", "script", "style"]
 
 # Structural chrome repeated on every page of a site (nav, header, footer).
-# Stripped so every derived metric — word count, heading sequence, links,
-# images, CTAs — reflects this page's actual content, not sitewide
-# boilerplate.
 BOILERPLATE_LANDMARK_TAGS = ["nav", "header", "footer"]
 
 # Content only rendered conditionally — <noscript> when JS is disabled;
 # <video>/<audio>/<canvas>/<object> fallback content when the browser can't
-# render the element at all. A real visitor essentially never sees any of
-# this, but unlike script/style it can contain genuine nested <a>/<img>/
-# heading elements (a no-JS tracking pixel, a "download instead" link), so
-# it has to be stripped from the shared metrics scope, not just text.
+# render the element at all. A real visitor essentially never sees any of this
 FALLBACK_CONTENT_TAGS = ["noscript", "video", "audio", "canvas", "object"]
 
 _HIDDEN_STYLE_PATTERN = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE)
