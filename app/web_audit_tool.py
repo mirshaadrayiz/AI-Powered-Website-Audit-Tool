@@ -1,7 +1,11 @@
+import logging
+
 from app.llm.client import generate_structured
 from app.llm.prompts import SYSTEM_PROMPT, build_user_prompt
 from app.schemas import AIAnalysisSchema, OutputSchema
 from app.scraper.scrape import scrape_page
+
+logger = logging.getLogger(__name__)
 
 
 async def audit_website(url: str) -> OutputSchema:
@@ -20,11 +24,13 @@ async def audit_website(url: str) -> OutputSchema:
         schema=AIAnalysisSchema,
     )
 
-    return OutputSchema(
+    output = OutputSchema(
         factual_metrics=scraped_page.metrics,
         insights=analysis.insights,
         recommendations=analysis.recommendations,
     )
+    logger.info("Audit result for %s:\n%s", url, output.model_dump_json(indent=2))
+    return output
 
 if __name__ == "__main__":
     """ uv run -m app.web_audit_tool """
