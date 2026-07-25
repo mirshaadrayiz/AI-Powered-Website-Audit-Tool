@@ -19,6 +19,13 @@ class HeadingCountsSchema(BaseModel):
     h1_count: int = Field(..., description="Total number of H1 headings in the text.")
     h2_count: int = Field(..., description="Total number of H2 headings in the text.")
     h3_count: int = Field(..., description="Total number of H3 headings in the text.")
+    sequence: List[str] = Field(
+        ...,
+        description=(
+            "H1-H3 tag names in document order (e.g. ['h1', 'h2', 'h2', 'h3']). "
+            "Reveals hierarchy jumps (e.g. H1 straight to H3) that raw counts alone cannot."
+        ),
+    )
 
 
 class FactualMetricsSchema(BaseModel):
@@ -73,6 +80,18 @@ class RecommendationSchema(BaseModel):
     recommendation: List[RecommendationReasoningSchema] = Field(..., description="List of recommendations with reasoning.")
 
 
+
+
+class AIAnalysisSchema(BaseModel):
+
+    """
+        The shape of a single AI call's output: insights + recommendations only.
+        Not factual_metrics — those come from the scraper, never the model.
+        This is what gets forced as the model's structured output schema.
+    """
+
+    insights: InsightSchema = Field(..., description="Insights generated from the factual metrics.")
+    recommendations: RecommendationSchema = Field(..., description="Recommendations generated based on the insights.")
 
 
 class OutputSchema(BaseModel):
