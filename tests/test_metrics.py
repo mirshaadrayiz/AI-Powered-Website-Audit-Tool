@@ -22,6 +22,34 @@ def test_heading_sequence_preserves_document_order_and_reveals_jumps():
     assert metrics.heading_counts.sequence == ["h1", "h3", "h2", "h1"]
 
 
+def test_heading_sequence_excludes_nav_header_and_footer_headings():
+    html = """
+    <header><nav><h2>Menu</h2></nav></header>
+    <main><h1>Real Title</h1><p>Content.</p></main>
+    <footer><h3>Quick Links</h3></footer>
+    """
+    metrics = metrics_for(html)
+
+    assert metrics.heading_counts.sequence == ["h1"]
+
+
+def test_metrics_exclude_video_canvas_and_object_fallback_content():
+    html = """
+    <main>
+      <h1>Real Title</h1>
+      <p>Content.</p>
+      <video><h2>Fallback Heading</h2><a href="/watch-elsewhere">Watch on YouTube</a></video>
+      <canvas><img src="/chart.png"><button>Fallback CTA</button></canvas>
+    </main>
+    """
+    metrics = metrics_for(html)
+
+    assert metrics.heading_counts.sequence == ["h1"]
+    assert metrics.internal_links_count == 0
+    assert metrics.image_count == 0
+    assert metrics.ctas_count == 0
+
+
 def test_word_count_reflects_visible_text_only():
     html = """
     <script>var hidden = "not counted at all here";</script>
@@ -66,6 +94,25 @@ def test_links_split_internal_vs_external_and_normalize_www():
 
     assert metrics.internal_links_count == 2
     assert metrics.external_links_count == 1
+    assert metrics.unique_internal_links_count == 2
+    assert metrics.unique_external_links_count == 1
+
+
+def test_unique_link_counts_deduplicate_repeated_destinations():
+    html = """
+    <a href="/pricing">See pricing</a>
+    <img src="/thumb.jpg">
+    <a href="/pricing">See pricing again</a>
+    <a href="/pricing#details">Pricing details</a>
+    <a href="https://external.com/page">External</a>
+    <a href="https://external.com/page">Same external link again</a>
+    """
+    metrics = metrics_for(html)
+
+    assert metrics.internal_links_count == 3
+    assert metrics.unique_internal_links_count == 1
+    assert metrics.external_links_count == 2
+    assert metrics.unique_external_links_count == 1
 
 
 def test_links_exclude_non_navigational_schemes():
@@ -82,7 +129,43 @@ def test_links_exclude_non_navigational_schemes():
     assert metrics.external_links_count == 0
 
 
-def test_image_missing_alt_counts_absent_and_empty_alt():
+def test_links_exclude_nav_and_footer_chrome():
+    html = """
+    <header><nav><a href="/">Home</a><a href="/about">About</a></nav></header>
+    <main><a href="/pricing">Pricing</a></main>
+    <footer><a href="https://external.com">Partner</a></footer>
+    """
+    metrics = metrics_for(html)
+
+    assert metrics.internal_links_count == 1
+    assert metrics.external_links_count == 0
+
+
+def test_ctas_exclude_nav_and_footer_chrome():
+    html = """
+    <header><nav><a href="/signup" class="btn">Sign Up</a></nav></header>
+    <main><p>No CTA in the content.</p></main>
+    <footer><button>Subscribe</button></footer>
+    """
+    metrics = metrics_for(html)
+
+    assert metrics.ctas_count == 0
+
+
+def test_images_exclude_nav_and_footer_chrome():
+    html = """
+    <header><img src="/logo.png" alt="Logo"></header>
+    <main><p>No images in the content.</p></main>
+    <footer><img src="/social.png"></footer>
+    """
+    metrics = metrics_for(html)
+
+    assert metrics.image_count == 0
+    assert metrics.image_missing_alt_count == 0
+    assert metrics.image_decorative_alt_count == 0
+
+
+def test_image_alt_counts_distinguish_missing_from_decorative():
     html = """
     <img src="/a.png" alt="Descriptive text">
     <img src="/b.png">
@@ -91,14 +174,16 @@ def test_image_missing_alt_counts_absent_and_empty_alt():
     metrics = metrics_for(html)
 
     assert metrics.image_count == 3
-    assert metrics.image_missing_alttext_percent == 67
+    assert metrics.image_missing_alt_count == 1
+    assert metrics.image_decorative_alt_count == 1
 
 
-def test_image_missing_alt_percent_is_zero_with_no_images():
+def test_image_alt_counts_are_zero_with_no_images():
     metrics = metrics_for("<p>No images on this page.</p>")
 
     assert metrics.image_count == 0
-    assert metrics.image_missing_alttext_percent == 0
+    assert metrics.image_missing_alt_count == 0
+    assert metrics.image_decorative_alt_count == 0
 
 
 def test_meta_title_and_description_are_extracted_and_trimmed():

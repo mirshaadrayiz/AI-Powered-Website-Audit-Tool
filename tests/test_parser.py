@@ -34,6 +34,19 @@ def test_excludes_nav_header_and_footer_boilerplate():
     assert text == "The actual page content."
 
 
+def test_excludes_video_audio_canvas_and_object_fallback_content():
+    html = """
+    <video><source src="clip.mp4">Your browser does not support HTML5 video.</video>
+    <audio><source src="clip.mp3">Your browser does not support the audio element.</audio>
+    <canvas>Your browser does not support canvas. <img src="static.png" alt="chart"></canvas>
+    <object data="report.pdf">Download the <a href="/report.pdf">report</a> instead.</object>
+    <p>Real content.</p>
+    """
+    text = extract_visible_text(parse_html(html))
+
+    assert text == "Real content."
+
+
 def test_excludes_elements_hidden_via_hidden_attribute():
     html = '<p>Visible.</p><p hidden>Not visible.</p>'
     text = extract_visible_text(parse_html(html))

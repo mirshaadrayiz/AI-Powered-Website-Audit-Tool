@@ -58,9 +58,15 @@ app/
 └── web_audit_tool.py      # Orchestrator: scrape -> AI -> response
 
 tests/
+├── conftest.py
+├── test_client.py
+├── test_fetch.py
+├── test_main.py
 ├── test_metrics.py
 ├── test_parser.py
-└── test_scrape.py
+├── test_prompts.py
+├── test_scrape.py
+└── test_web_audit_tool.py
 
 pyproject.toml
 .env.example
@@ -73,13 +79,11 @@ Each package also has an `__init__.py`, omitted above for brevity.
 ```bash
 uv sync
 cp .env.example .env   # add your Gemini API key
-uv run pytest          # 27 tests
+uv run pytest          # optional, 45 tests
 ```
 
 Uses **Google Gemini `gemini-3.6-flash`**. Get a free key at
-<https://aistudio.google.com/apikey>, no credit card required, and set it as `GEMINI_API_KEY`. The
-model is pinned rather than a floating `-latest` alias, since the prompt is tuned to its exact
-behavior; override with `GEMINI_MODEL` if you upgrade.
+<https://aistudio.google.com/apikey>, no credit card required, and set it as `GEMINI_API_KEY`. 
 
 ## Running
 
@@ -164,10 +168,15 @@ call, so there's nothing to enable.
 ## Validation
 
 Every metric was cross-checked against a large real page (565KB HTML, 1200+ links) by independently
-re-implementing each metric definition and diffing the results; all fields matched exactly. The
-27-test suite covers heading order, link normalization and deduplication, non-navigational link
-schemes, missing versus decorative alt text, chrome exclusion, text extraction, and the fetch → parse
-→ metrics pipeline.
+re-implementing each metric definition and diffing the results; all fields matched exactly.
+
+The 45-test suite covers both halves of the tool, not just the scraper. Scraper coverage: heading
+order, link normalization and deduplication, non-navigational link schemes, missing versus decorative
+alt text, chrome exclusion, text extraction, and network failure modes (timeouts, non-2xx, non-HTML).
+AI layer and API coverage: the retry policy (which errors retry, which don't, and the `429`
+fail-fast rule), prompt construction and truncation, the orchestrator's scrape-then-analyze wiring,
+and the `/audit` route's error-code mapping. All AI calls are mocked; no test hits the real Gemini
+API.
 
 ## Future improvements
 
