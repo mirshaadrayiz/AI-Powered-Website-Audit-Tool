@@ -62,7 +62,6 @@ tests/
 ├── test_parser.py
 └── test_scrape.py
 
-main.py                    # uv project stub, not the API entry point
 pyproject.toml
 .env.example
 ```
