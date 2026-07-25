@@ -21,9 +21,6 @@ async def fetch_html(url: str, timeout: float = DEFAULT_TIMEOUT) -> str:
         async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
             response = await client.get(url, headers=headers)
     except httpx.RequestError as exc:
-        # Some httpx exceptions (e.g. ConnectTimeout) have an empty str() —
-        # fall back to the exception's class name so the message is never
-        # a bare "Failed to reach <url>: " with nothing after the colon.
         detail = str(exc) or type(exc).__name__
         raise FetchError(f"Failed to reach {url}: {detail}") from exc
 

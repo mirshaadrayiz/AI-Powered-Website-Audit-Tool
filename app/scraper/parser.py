@@ -4,15 +4,25 @@ import re
 from bs4 import BeautifulSoup
 
 # Markup that isn't rendered in the page body at all. <head> is included
-# because none of its children (title, meta, link) render as body content —
-# title text shows in a browser tab, not on the page.
-MARKUP_NOISE_TAGS = ["head", "script", "style", "noscript"]
+# because none of its children (title, meta, link) render as body content.
+# Only relevant to text extraction: script/style hold raw JS/CSS text, not
+# real markup, so unlike FALLBACK_CONTENT_TAGS they can't produce a stray
+# <h1>/<a>/<img> and don't need stripping from the shared metrics scope.
+MARKUP_NOISE_TAGS = ["head", "script", "style"]
 
 # Structural chrome repeated on every page of a site (nav, header, footer).
-# Stripped so word count and the text handed to the AI layer reflect this
-# page's actual content, not sitewide boilerplate. Relies on semantic HTML5
-# tags — a site that wraps nav/footer in plain <div>s instead won't be caught.
+# Stripped so every derived metric — word count, heading sequence, links,
+# images, CTAs — reflects this page's actual content, not sitewide
+# boilerplate.
 BOILERPLATE_LANDMARK_TAGS = ["nav", "header", "footer"]
+
+# Content only rendered conditionally — <noscript> when JS is disabled;
+# <video>/<audio>/<canvas>/<object> fallback content when the browser can't
+# render the element at all. A real visitor essentially never sees any of
+# this, but unlike script/style it can contain genuine nested <a>/<img>/
+# heading elements (a no-JS tracking pixel, a "download instead" link), so
+# it has to be stripped from the shared metrics scope, not just text.
+FALLBACK_CONTENT_TAGS = ["noscript", "video", "audio", "canvas", "object"]
 
 _HIDDEN_STYLE_PATTERN = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE)
 
@@ -25,13 +35,25 @@ def parse_html(html: str) -> BeautifulSoup:
     return BeautifulSoup(html, "lxml")
 
 
+def strip_chrome(soup: BeautifulSoup) -> BeautifulSoup:
+    """Return a copy of the DOM scoped to this page's real, always-visible content.
+
+    Removes sitewide chrome (nav/header/footer) and conditionally-rendered
+    fallback content (noscript/video/audio/canvas/object) — see
+    BOILERPLATE_LANDMARK_TAGS and FALLBACK_CONTENT_TAGS. This is the single
+    scope every tag-based metric — heading sequence, links, images, CTAs,
+    word count — is computed from, so they all describe content a real
+    visitor sees, not boilerplate or fallback markup. Operates on a copy;
+    the original `soup` is never mutated.
+    """
+    working_copy = copy.copy(soup)
+    for tag in working_copy.find_all(BOILERPLATE_LANDMARK_TAGS + FALLBACK_CONTENT_TAGS):
+        tag.decompose()
+    return working_copy
+
+
 def _is_hidden(tag) -> bool:
     """Detect elements that are visually hidden from every viewer.
-
-    Deliberately does NOT check aria-hidden: that attribute hides an
-    element from the accessibility tree (screen readers), not from visual
-    rendering — a sighted visitor still sees it, so treating it as "not
-    visible text" would wrongly strip real page content.
 
     Also a static-HTML tool with no CSS/JS execution, so this only catches
     hiding done inline or via HTML attributes — not visibility controlled
@@ -49,16 +71,14 @@ def _is_hidden(tag) -> bool:
 def extract_visible_text(soup: BeautifulSoup) -> str:
     """Return the page's human-readable content text.
 
-    Excludes non-content markup (script/style/noscript), sitewide chrome
-    (nav/header/footer), and statically-detectable hidden elements.
-    Operates on a copy so callers can keep using the original `soup` for
-    tag-based metrics (headings, links, images, CTAs) afterwards — those
-    should still see nav/footer links and CTAs, only the text extraction
-    scopes down to page content.
+    Excludes non-content markup (head/script/style), everything strip_chrome
+    already removes (sitewide chrome, fallback content), and
+    statically-detectable hidden elements. Operates on a copy; the original
+    `soup` is never mutated.
     """
-    working_copy = copy.copy(soup)
+    working_copy = strip_chrome(soup)
 
-    for tag in working_copy(MARKUP_NOISE_TAGS + BOILERPLATE_LANDMARK_TAGS):
+    for tag in working_copy.find_all(MARKUP_NOISE_TAGS):
         tag.decompose()
 
     for tag in working_copy.find_all(True):
