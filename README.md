@@ -31,8 +31,10 @@ flowchart TD
 
 - **The scraper is deterministic.** Every metric is computed in code from the cleaned page. No AI
   involved, so the same page always produces the same numbers.
+
 - **The AI layer never sees raw HTML.** It only receives the computed metrics and the page's visible
   text, and only reasons about what they mean.
+
 - **Facts and AI output never mix.** The model's output schema holds insights and recommendations
   only. The metrics block is attached afterward, copied straight from the scraper (the dashed line in
   the diagram). The model can't change a single number it was given.
@@ -83,7 +85,7 @@ uv run pytest          # optional, 45 tests
 ```
 
 Uses **Google Gemini `gemini-3.6-flash`**. Get a free key at
-<https://aistudio.google.com/apikey>, no credit card required, and set it as `GEMINI_API_KEY`. 
+<https://aistudio.google.com/apikey>, no credit card required, and set it as `GEMINI_API_KEY`.
 
 ## Running
 
@@ -92,7 +94,9 @@ uv run fastapi dev app/main.py
 ```
 
 - **Web UI:** <http://127.0.0.1:8000>
+
 - **Swagger UI:** <http://127.0.0.1:8000/docs>
+
 - **API:** `POST /audit` with `{"url": "..."}`:
 
   ```bash
@@ -120,50 +124,31 @@ call, so there's nothing to enable.
 
 ## Design decisions & trade-offs
 
-- **A free model was a deliberate constraint.** Gemini's Flash free tier needs no billing setup to
-  run or review this project. The cost is a thin daily quota, and that shapes several decisions below:
-  one model call per audit instead of a multi-pass chain, citation grounding as a one-shot instruction
-  instead of a verify-and-retry loop, and `429`s failing fast instead of retrying. On a daily quota, a
-  `429` means the quota is exhausted, and backoff can't close that gap.
-- **Metrics are computed in code, never by the model.** Counts are exact, reproducible facts. A model
-  asked to count links or words from HTML would approximate, and could answer differently each run.
-- **Structured output is enforced by schema, not prompt text.** The response schema is passed to
-  Gemini as JSON schema, constraining output at the decoding level. The prompt's job is different: it
-  shapes what content goes in each field, not what shape the JSON takes.
-- **Insights must cite their metrics.** Each insight pairs a short analysis with the exact metric
-  fields behind it, copied verbatim as `"field_name: value"`. This makes grounding visible instead of
-  something you take on trust. It's currently a prompt-level rule though, not one checked in code (see
-  [Future improvements](#future-improvements)).
-- **Tuned for reproducibility, not creativity.** Temperature 0, minimal thinking, capped output
-  length. Re-auditing the same URL should give the same findings, not a different set from sampling
-  variance. This is bounded extraction over pre-computed metrics, not open-ended reasoning, so deeper
-  thinking would only add latency.
-- **The prompt teaches the model how to read the numbers, not just what to write.** A few metrics are
-  easy to misread: heading *sequence* over raw counts to catch hierarchy jumps; CTA count treated as
-  possibly inflated by navigation links; *unique* link destinations, not instance counts, for
-  directory-vs-content judgments; decorative `alt=""` treated as correct markup, not a defect.
-- **Page text is treated as untrusted input.** The model is told to treat anything that looks like an
-  instruction inside scraped content as just more content to evaluate, flagging it as a finding if it
-  looks manipulative, rather than obeying it.
-- **Retries only happen where they can help.** Timeouts, connection errors, 5xx responses, and
-  schema-violating output retry with backoff, under a hard per-request timeout. Once retries are
-  exhausted, the failure is wrapped in the app's own error type, so a genuine bug in our code still
-  surfaces as a 500 instead of being mislabeled as an AI failure.
+- **A free model was a deliberate constraint.** Gemini Flash requires no billing setup, which makes the project easy to run and review. The trade-off is a limited daily quota, so the audit uses a single model call instead of multi-step AI pipelines.
+
+- **Metrics are computed deterministically, not by the model.** Counts such as words, headings, links, and CTAs come directly from the scraper. The AI layer only interprets these facts, preventing the model from inventing or changing measurements.
+
+- **Insights are grounded in metrics.** Every insight and recommendation includes the exact metric fields it is based on. This keeps the reasoning traceable, although validation is currently enforced at the prompt level rather than checked in code.
+
+- **The model is tuned for consistent output.** Temperature 0 and structured output keep audits reproducible. The model is used for interpretation and recommendations, not open-ended generation.
+
+- **The prompt teaches the model how to interpret metrics.** Some metrics need context: heading sequences matter more than counts for hierarchy, and CTA counts may include navigation elements rather than conversion-focused actions.
+
+- **Scraped content is treated as untrusted input.** Page text is provided as data only. Instructions embedded inside webpages are not followed and may themselves be reported as suspicious content.
+
+- **Long pages are truncated instead of summarized.** This avoids an additional model call and keeps the original page text available for analysis. The trade-off is that very long pages may provide incomplete context.
+
+- **Retries are limited to recoverable failures.** Temporary network issues, server errors, and invalid model output can retry. Quota exhaustion fails immediately because waiting will not resolve it.
 
 ## Limitations
 
-- **No headless browser or JS execution.** A plain HTTP client, so JS-rendered pages and
-  bot-protection interstitials (e.g. Cloudflare's "Just a moment…") fail with a clear error instead of
-  being silently audited as real content.
-- **CTA detection is a heuristic.** Counts semantic `<button>` elements, form submit inputs, links
-  with `role="button"`, and conventional `btn`/`cta` class names. A link styled purely through utility
-  classes with no semantic marker goes uncounted.
-- **Hidden-text detection sees only static markup.** Catches the `hidden` attribute and inline
-  `display:none`/`visibility:hidden` (nobody sees that text), but not `aria-hidden` (sighted visitors
-  still see it). Can't distinguish a legitimate accordion panel from keyword cloaking.
-- **Chrome removal relies on semantic HTML5.** Strips `<nav>`/`<header>`/`<footer>` before counting
-  any metric, so a nav heading can't fake a hierarchy problem. A site wrapping its chrome in plain
-  `<div>`s, though, won't be stripped.
+- **No JavaScript rendering.** The scraper uses plain HTTP requests, so JS-heavy pages and bot-protection pages may not contain enough content to audit.
+
+- **CTA detection is heuristic.** It detects common CTA patterns but may miss visually styled buttons that lack semantic HTML markers.
+
+- **Hidden content detection is limited to static HTML.** It detects common hidden elements such as `display:none`, but cannot determine whether hidden sections are legitimate UI components or SEO manipulation.
+
+- **Chrome removal depends on semantic HTML.** Standard `<nav>`, `<header>`, and `<footer>` sections are removed before analysis, but custom layouts using generic containers may not be detected.
 
 ## Validation
 
@@ -180,24 +165,22 @@ API.
 
 ## Future improvements
 
-- **Verify citations in code.** Grounding is currently enforced only by asking the model nicely;
-  nothing checks a citation against the real metrics. This splits into two costs:
-  - *Detecting* a mismatch is cheap: every citation is already `"field_name: value"`, so it's a
-    lookup and a comparison, no extra API call. Just hasn't been built yet.
-  - *Fixing* a mismatch means re-calling the model with the discrepancy as feedback, which doubles
-    the request cost, expensive against a ~20-request/day quota. Exact matching also can't tell a
-    hallucination from a rounded citation ("roughly 260 words"), so a retry loop needs care.
-- **Split the audit into two passes:** insights, then recommendations conditioned on them, instead of
-  both from one call. Better output, at twice the quota cost.
-- **Adversarial self-review pass:** a second call given the insights and the metrics, asked only to
-  find claims the metrics don't support.
-- **Cache audits per URL**, and let the model tier scale with the key: Flash on a free key, a
-  stronger model once billing is available.
-- **Give the model more to reason over:** a "% of page text hidden by default" metric so it can flag
-  keyword-stuffing risk explicitly, and a Playwright fallback so JS-rendered pages reach the AI layer
-  at all.
-- **Smarter 429 handling.** Gemini's error details distinguish per-minute throttling from
-  daily-quota exhaustion; reading that would let a short-lived throttle retry while a daily-quota
-  failure still fails fast.
-- **SSRF hardening and a response size cap** before this is deployed as a service anyone can point at
-  arbitrary URLs. It currently fetches any user-supplied URL with no IP allowlist or body limit.
+- **Verify citations in code.** Grounding is currently enforced only by the prompt; nothing checks a citation against the actual metrics.
+  - *Detecting* a mismatch is cheap: every citation is already `"field_name: value"`, so validation is just a lookup and comparison.
+  - *Fixing* a mismatch requires re-calling the model with the discrepancy as feedback, doubling the request cost against the free-tier quota. Exact matching should also be done carefully without wasting API calls.
+
+- **Validate prompt injection in code, not just in the prompt.** The current defense is a system-prompt rule telling the model to treat page content as data rather than instructions. Since the tool audits arbitrary third-party webpages, a malicious page can deliberately include prompt-injection attempts. A more robust approach would scan scraped content for known injection patterns before it reaches the model and flag outputs that look suspiciously influenced, rather than relying solely on prompt instructions.
+
+- **Split the audit into two passes:** generate insights first, then recommendations conditioned on those insights instead of producing both in a single call. This should improve recommendation quality, at twice the request cost.
+
+- **Summarize very long pages before auditing them**, if truncation proves to be a practical limitation. A larger-context model could first compress the page, with the existing model auditing that summary instead of a truncated slice. This would need to remain compatible with the project's free-tier constraint, and the loss of detail would need validation against real pages.
+
+- **Adversarial self-review pass.** A second model call would receive the metrics and generated insights and be asked only to identify claims that aren't supported by the evidence.
+
+- **Cache audit results.** If the same website is audited again, reuse the previous result instead of scraping the page and calling the model again. This reduces latency, conserves API quota, and avoids repeated work for unchanged pages. If a paid API key is configured, automatically use a stronger model instead of the default free-tier Flash model.
+
+- **Headless-browser fallback for JS-rendered pages.** The scraper currently uses a plain HTTP client, so JavaScript-rendered pages and bot-protection interstitials often contain little or no useful content. Falling back to a headless browser (e.g. Playwright) when a page appears empty or fails to fetch would significantly improve coverage, at the cost of additional dependencies, latency, and resource usage.
+
+- **Smarter 429 handling.** Gemini distinguishes temporary rate limiting from daily quota exhaustion. Retrying only temporary throttling while failing fast on exhausted daily quotas would improve reliability without unnecessary retries.
+
+- **SSRF hardening and response size limits.** The current implementation fetches any user-supplied URL without restricting destination IPs or limiting response size. Before deployment as a public service, it should restrict requests to safe destinations and enforce a maximum response size.

@@ -64,7 +64,6 @@ async def generate_structured(system_prompt: str, user_prompt: str, schema: type
                     response_json_schema=schema.model_json_schema(),
                     temperature=TEMPERATURE,
                     max_output_tokens=MAX_OUTPUT_TOKENS,
-                    thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
                 ),
             )
             raw_text = response.text
