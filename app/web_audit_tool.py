@@ -1,3 +1,9 @@
+"""Pipeline orchestrator: scrape -> AI analysis -> combined output.
+
+Importable as `audit_website`, and runnable standalone via
+`uv run -m app.web_audit_tool <url>` (see __main__ below).
+"""
+
 import logging
 
 from app.llm.client import generate_structured
@@ -9,9 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _verify_citations(insights: InsightSchema, metrics: FactualMetricsSchema) -> None:
-    """Flag any metrics_cited entry that doesn't match the real scraped value.
-
-    """
+    """Flag any metrics_cited entry that doesn't match the real scraped value."""
     facts = metrics.model_dump()
     for field_name in type(insights).model_fields:
         detail = getattr(insights, field_name)
@@ -54,8 +58,7 @@ async def audit_website(url: str) -> OutputSchema:
     return output
 
 if __name__ == "__main__":
-    """ uv run -m app.web_audit_tool """
-
+    # uv run -m app.web_audit_tool <url>
     import asyncio
     import sys
 

@@ -52,10 +52,9 @@ def _normalize_netloc(netloc: str) -> str:
 def _count_links(soup: BeautifulSoup, source_url: str) -> tuple[int, int, int, int]:
     """Return (internal, external, unique internal, unique external).
 
-    internal/external count every navigational <a> tag instance; the unique_*
-    counts are deduplicated by resolved destination (fragment ignored), so a
-    link repeated across a title, a thumbnail, and a duplicate mobile/desktop
-    nav only counts once toward "how many distinct places this page links to."
+    internal/external count every navigational <a> tag instance; unique_*
+    dedupes by resolved destination (fragment ignored), so the same link
+    repeated in multiple places on the page only counts once.
     """
     source_netloc = _normalize_netloc(urlparse(source_url).netloc)
     internal = 0
@@ -108,9 +107,7 @@ def _meta_description(soup: BeautifulSoup) -> str:
 
 
 def extract_metrics(content_soup: BeautifulSoup, source_url: str) -> FactualMetricsSchema:
-    """
-    Compute deterministic, reproducible page metrics from an already-scoped DOM.
-    """
+    """Compute deterministic, reproducible page metrics from an already-scoped DOM."""
     internal_links, external_links, unique_internal_links, unique_external_links = _count_links(
         content_soup, source_url
     )

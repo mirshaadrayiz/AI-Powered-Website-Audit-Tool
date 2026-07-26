@@ -69,10 +69,7 @@ class InsightDetailSchema(BaseModel):
 
 
 class InsightSchema(BaseModel):
-    """Schema for insights.
-
-    These insights are generated from the factual metrics and provide a deep analysis.
-    """
+    """Schema for insights."""
 
     seo_structure: InsightDetailSchema = Field(..., description="Insights related to the SEO structure of the page.")
     messaging_clarity: InsightDetailSchema = Field(..., description="Insights related to the clarity of messaging on the page.")
@@ -83,10 +80,7 @@ class InsightSchema(BaseModel):
 
 
 class RecommendationReasoningSchema(BaseModel):
-    """Schema for a single recommendation.
-
-    Generated from the insights and provides an actionable step plus its reasoning.
-    """
+    """Schema for a single recommendation."""
 
     recommendation: str = Field(..., description="The recommendation provided based on the insights.")
     reasoning: str = Field(
@@ -111,10 +105,7 @@ class AIAnalysisSchema(BaseModel):
 
 
 class OutputSchema(BaseModel):
-    """The shape of the API's output: factual metrics + AI analysis.
-
-    This is what the API returns to the caller, combining both halves.
-    """
+    """The shape of the API's output: factual metrics + AI analysis."""
 
     factual_metrics: FactualMetricsSchema = Field(..., description="Factual metrics extracted from the page.")
     insights: InsightSchema = Field(..., description="Insights generated from the factual metrics.")

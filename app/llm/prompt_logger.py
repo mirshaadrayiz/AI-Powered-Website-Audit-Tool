@@ -21,9 +21,7 @@ def log_call(
     raw_output: str,
     parsed_output: BaseModel,
 ) -> Path | None:
-    """
-    Write one record of a successful model call to logs/, as plain text.
-    """
+    """Write one record of a successful model call to logs/, as plain text."""
     timestamp = datetime.now(timezone.utc)
     filename = f"{timestamp.strftime('%Y%m%dT%H%M%S')}_{uuid4().hex[:8]}.log"
 

@@ -10,9 +10,8 @@ from app.scraper.parser import parse_html, strip_chrome, text_from_scope
 class ScrapedPage:
     """Internal handoff between the scraper and the AI layer.
 
-    Not a schemas.py model on purpose — FactualMetricsSchema/OutputSchema
-    are the validated external API contract; this is just a plain internal
-    transport object, so a dataclass is enough.
+    FactualMetricsSchema/OutputSchema are the validated external API contract;
+    this is just a plain internal transport object, so a dataclass is enough.
     """
 
     metrics: FactualMetricsSchema
