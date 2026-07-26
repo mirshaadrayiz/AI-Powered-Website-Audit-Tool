@@ -1,13 +1,23 @@
-# Prompt log structure
+# Prompt logs
 
-This documents the general shape of every AI call the tool makes, independent of any specific
-audit run: the system prompt, the user prompt template, and the JSON Schemas for the structured
-input and output. For one concrete, real instance of all of this filled in with actual data, see
-[`logs/example_audit_stripe.log`](logs/example_audit_stripe.log).
+The fixed shape of every AI call this tool makes, and how that call is orchestrated: the system
+prompt, how the user prompt is constructed, the structured input the model receives, the structured
+output forced on it, and what happens around the call. Nothing here varies between audits — only
+the URL, the metrics, and the page text do.
 
-## System prompt
+Every successful call writes one plain-text log to `logs/`, in sections matching the order below:
 
-Static, defined in `app/llm/prompts.py` as `SYSTEM_PROMPT`, sent identically on every call:
+| | Fixed shape | Log section |
+| --- | --- | --- |
+| System prompt | [§1](#1-system-prompt) | `--- SYSTEM PROMPT ---` |
+| User prompt construction | [§2](#2-user-prompt-construction) | `--- USER PROMPT ---` |
+| Structured input | [§3](#3-structured-input-sent-to-the-model) | the `FACTUAL METRICS` block inside the user prompt |
+| Raw model output | [§4](#4-raw-model-output) | `--- RAW OUTPUT ---`, then `--- PARSED OUTPUT ---` |
+| Orchestration | [§5](#5-ai-orchestration) | header: `model` / `attempt` / `schema` |
+
+## 1. System prompt
+
+Static, sent identically on every call:
 
 ```
 You are a senior website auditor that builds high-performing websites focused on SEO, conversion optimization, content clarity, and UX. You are auditing a single webpage for a client.
@@ -43,10 +53,9 @@ Rules:
 - Be concise — each insight is a few sentences, not an essay.
 ```
 
-## User prompt (template)
+## 2. User prompt construction
 
-Built by `build_user_prompt()` in `app/llm/prompts.py`. The shape is fixed on every call; only the
-URL, the metrics JSON, and the page text vary:
+The shape is fixed on every call; only the URL, the metrics JSON, and the page text vary:
 
 ```
 Audit this page: {url}
@@ -60,6 +69,14 @@ PAGE TEXT CONTENT:
 </untrusted_page_content>
 ```
 
+- **`{metrics_json}`** is the scraper's measurements, serialized as JSON (§3). They are computed in
+  code, and they are attached to the final response unchanged — which is why the model is told to
+  treat them as ground truth: nothing it writes can alter a number it was given.
+
+- **`{content}`** is the page's visible text, never raw HTML. Site chrome, non-rendered markup, and
+  hidden elements are removed first, so the model reads roughly what a visitor reads. It is wrapped
+  in a tag because it is arbitrary third-party text — data to analyze, not instructions to follow.
+
 If the page's visible text exceeds 6,000 characters, the label changes to disclose the cut instead
 of silently truncating:
 
@@ -67,10 +84,11 @@ of silently truncating:
 PAGE TEXT CONTENT (showing the first 6,000 of {total_chars} characters, {percent_shown}%):
 ```
 
-## Structured input schema (`FactualMetricsSchema`)
+## 3. Structured input sent to the model
 
 The JSON Schema for the `{metrics_json}` block embedded in the user prompt above — the structured,
-scraper-computed input the model receives and is told never to recompute:
+scraper-computed input the model receives and is told never to recompute. `image_missing_alt_percent`
+is derived from the two image counts rather than measured separately:
 
 ```json
 {
@@ -123,10 +141,11 @@ scraper-computed input the model receives and is told never to recompute:
 }
 ```
 
-## Structured output schema (`AIAnalysisSchema`)
+## 4. Raw model output
 
-Forced on the model via Gemini's `response_json_schema`, so every raw output is guaranteed to
-validate against this shape before it's parsed:
+This schema is forced on the model, so the raw response is a JSON object of this shape rather than
+prose that has to be salvaged. The log's raw section is that string exactly as returned, before any
+parsing:
 
 ```json
 {
@@ -189,3 +208,63 @@ validate against this shape before it's parsed:
   "type": "object"
 }
 ```
+
+Note what is *not* in it: `factual_metrics`. The model produces insights and recommendations only.
+The metrics are attached afterward, copied from the scraper, so a number can never round-trip
+through the model.
+
+Once the raw string validates, two things happen before a caller sees it: every cited metric is
+checked against the real value and labeled `(unverified)` if it doesn't match, and the scraper's
+metrics are attached. Both happen after the log is written, so the parsed section of a log shows the
+model's own citations rather than the labeled ones.
+
+## 5. AI orchestration
+
+```mermaid
+flowchart TD
+    URL(["URL"])
+    SCRAPE["<b>Scrape</b><br/>fetch, 10s timeout<br/>metrics + visible text"]
+    BUILD["<b>Build prompt</b><br/>system prompt + metrics JSON<br/>+ page text, truncated at 6,000 chars"]
+    CALL["<b>One Gemini call</b><br/>temperature 0 · output schema forced<br/>60s timeout"]
+    VALID{Schema valid?}
+    RETRY{Retryable?}
+    LOG["<b>Write prompt log</b><br/>prompts, raw + parsed output"]
+    VERIFY["<b>Verify citations</b><br/>each cited value vs. the real metric"]
+    OUT(["<b>Response</b><br/>scraper metrics + insights + recommendations"])
+    FAIL(["<b>Fail fast</b><br/>422 unfetchable · 502 model unavailable"])
+
+    URL --> SCRAPE
+    SCRAPE --> BUILD
+    BUILD --> CALL
+    CALL --> VALID
+    VALID -->|yes| LOG
+    LOG --> VERIFY
+    VERIFY --> OUT
+    VALID -->|no| RETRY
+    RETRY -->|"timeout, connection, 408/5xx, bad schema — up to 3 attempts, 1s then 2s"| CALL
+    RETRY -->|"429, or attempts exhausted"| FAIL
+    SCRAPE -.->|"metrics, unchanged"| OUT
+
+    classDef fact fill:#e7f0fb,stroke:#3f72ab,color:#12233b
+    classDef ai fill:#f2e8fb,stroke:#7d4faf,color:#26123a
+    classDef io fill:#eceef1,stroke:#5b6472,color:#1f2937
+    classDef bad fill:#fdecea,stroke:#b3261e,color:#5c1512
+    class SCRAPE,VERIFY fact
+    class BUILD,CALL,LOG ai
+    class URL,OUT,VALID,RETRY io
+    class FAIL bad
+```
+
+One model call per audit: the free-tier quota is the binding constraint, so there is no multi-step
+chain. The model is used for interpretation rather than open-ended generation, so temperature is 0
+and the output schema is enforced twice — once by the provider, once on parsing — instead of being
+requested in the prompt and hoped for.
+
+Retries cover only failures a second attempt can fix: request timeouts, connection errors, 408/5xx
+responses, and output that violates the schema. A 429 is not retried, because an exhausted daily
+quota will not reset inside a backoff window. The logged `attempt` records which try produced the
+response, so a retry stays visible after the fact, and only successful calls are logged — a failed
+one has no structured output to show, and the raised error already surfaces it.
+
+Failure modes stay distinguishable at the API boundary rather than collapsing into one opaque 500:
+a page that cannot be fetched is a `422`, a model that cannot be reached is a `502`.
