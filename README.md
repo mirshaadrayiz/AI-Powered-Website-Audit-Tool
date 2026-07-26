@@ -86,7 +86,7 @@ Each package also has an `__init__.py`, omitted above for brevity.
 ```bash
 uv sync
 cp .env.example .env   # add your Gemini API key
-uv run pytest          # optional, 45 tests
+uv run pytest          # optional, 47 tests
 ```
 
 Uses **Google Gemini `gemini-3.6-flash`**. Get a free key at
@@ -174,10 +174,11 @@ input and output.
 Metrics were independently re-implemented and compared against a large real webpage (565KB HTML,
 1200+ links); all results matched exactly.
 
-The 45-test suite covers the full pipeline: metric extraction (headings, links, images, text,
+The 47-test suite covers the full pipeline: metric extraction (headings, links, images, text,
 chrome removal, and fetch failures), AI orchestration (prompt construction, truncation, retries,
-and error handling), and the `/audit` API behavior. All AI calls are mocked; no tests depend on the
-live Gemini API.
+and error handling), citation verification (accurate citations in both the quoted-string and bare
+forms a model writes them in, and mismatched values being labeled), and the `/audit` API behavior.
+All AI calls are mocked; no tests depend on the live Gemini API.
 
 ## Future improvements
 

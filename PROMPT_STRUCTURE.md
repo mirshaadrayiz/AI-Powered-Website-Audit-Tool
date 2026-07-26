@@ -162,7 +162,7 @@ validate against this shape before it's parsed:
       "type": "object"
     },
     "RecommendationReasoningSchema": {
-      "description": "Schema for recommendations.",
+      "description": "Schema for a single recommendation.",
       "properties": {
         "recommendation": { "description": "The recommendation provided based on the insights.", "title": "Recommendation", "type": "string" },
         "reasoning": { "description": "Why this action follows, citing the specific metric value(s) behind it", "title": "Reasoning", "type": "string" }
@@ -170,28 +170,19 @@ validate against this shape before it's parsed:
       "required": ["recommendation", "reasoning"],
       "title": "RecommendationReasoningSchema",
       "type": "object"
-    },
-    "RecommendationSchema": {
-      "description": "Schema for recommendations.",
-      "properties": {
-        "recommendation": {
-          "description": "3 to 5 prioritized, actionable recommendations with reasoning, most impactful first.",
-          "items": { "$ref": "#/$defs/RecommendationReasoningSchema" },
-          "maxItems": 5,
-          "minItems": 3,
-          "title": "Recommendation",
-          "type": "array"
-        }
-      },
-      "required": ["recommendation"],
-      "title": "RecommendationSchema",
-      "type": "object"
     }
   },
   "description": "The shape of a single AI call's output: insights + recommendations only. Not factual_metrics — those come from the scraper, never the model.",
   "properties": {
     "insights": { "$ref": "#/$defs/InsightSchema", "description": "Insights generated from the factual metrics." },
-    "recommendations": { "$ref": "#/$defs/RecommendationSchema", "description": "Recommendations generated based on the insights." }
+    "recommendations": {
+      "description": "3 to 5 prioritized, actionable recommendations with reasoning, most impactful first.",
+      "items": { "$ref": "#/$defs/RecommendationReasoningSchema" },
+      "maxItems": 5,
+      "minItems": 3,
+      "title": "Recommendations",
+      "type": "array"
+    }
   },
   "required": ["insights", "recommendations"],
   "title": "AIAnalysisSchema",

@@ -4,6 +4,7 @@ Importable as `audit_website`, and runnable standalone via
 `uv run -m app.web_audit_tool <url>` (see __main__ below).
 """
 
+import json
 import logging
 
 from app.llm.client import generate_structured
@@ -12,6 +13,18 @@ from app.schemas import AIAnalysisSchema, FactualMetricsSchema, InsightSchema, O
 from app.scraper.scrape import scrape_page
 
 logger = logging.getLogger(__name__)
+
+
+def _cited_value_matches(value, claimed: str) -> bool:
+    """Whether a citation's value matches the real one, in either form a model copies it.
+
+    The metrics block in the prompt is JSON, so a list reaches the model as
+    ["h1", "h2"] and a string reaches it quoted — json.dumps reproduces both,
+    with ensure_ascii=False since the prompt carries literal UTF-8 (a curly
+    quote in a meta title must not be compared against a \\u escape). Models
+    also cite scalars bare, so str() is accepted too.
+    """
+    return claimed in (str(value), json.dumps(value, ensure_ascii=False))
 
 
 def _verify_citations(insights: InsightSchema, metrics: FactualMetricsSchema) -> None:
@@ -25,7 +38,7 @@ def _verify_citations(insights: InsightSchema, metrics: FactualMetricsSchema) ->
             value = facts
             for part in field_path.strip().split("."):
                 value = value.get(part) if isinstance(value, dict) else None
-            if value is not None and str(value) == claimed_value.strip():
+            if value is not None and _cited_value_matches(value, claimed_value.strip()):
                 flagged.append(citation)
             else:
                 flagged.append(f"{citation} (unverified)")
