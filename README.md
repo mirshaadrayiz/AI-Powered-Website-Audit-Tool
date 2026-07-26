@@ -34,8 +34,9 @@ flowchart TD
     class URL,OUT io
 ```
 
-- **The scraper is deterministic.** Every metric is computed in code from the cleaned page. No AI
-  involved, so the same page always produces the same numbers.
+- **The scraper is deterministic.** Every metric is computed in code from the page's content area,
+  with `<nav>`, `<header>`, and `<footer>` removed first (see Design decisions). No AI involved, so
+  the same page always produces the same numbers.
 
 - **The AI layer never sees raw HTML.** It only receives the computed metrics and the page's visible
   text, and only reasons about what they mean.
@@ -145,6 +146,8 @@ and output, and how the call itself is orchestrated.
 
 - **Metrics are computed deterministically, not by the model.** Counts such as words, headings, links, and CTAs come directly from the scraper. The AI layer only interprets these facts, preventing the model from inventing or changing measurements.
 
+- **Counts measure the page's content area, not the whole document.** `<nav>`, `<header>`, and `<footer>` are removed before anything is counted, since chrome repeated on every page of a site would inflate the numbers — nav and footer text alone can make a thin page look substantive. The trade-off is that link and CTA counts come out below what page-wide SEO tools report for the same URL.
+
 - **Insights are grounded in metrics, and citations are checked, not just requested.** Every insight cites the metric field(s) it's based on. After the model responds, each citation is parsed and checked against the real metrics, a citation that doesn't match is flagged as unverified rather than dropped or silently trusted.
 
 - **The model is tuned for consistent output.** Temperature 0 and structured output keep audits reproducible. The model is used for interpretation and recommendations, not open-ended generation.
@@ -180,31 +183,22 @@ and error handling), citation verification (accurate citations in both the quote
 forms a model writes them in, and mismatched values being labeled), and the `/audit` API behavior.
 All AI calls are mocked; no tests depend on the live Gemini API.
 
-## Future improvements
-
 - **Move to a larger, paid model.** The free-tier constraint (see Design decisions) currently caps
   this at Gemini Flash. A model with stronger reasoning would directly improve insight and
   recommendation quality — the highest-leverage change on this list — at the cost of API billing
   and the project's current no-credit-card setup story.
 
-- **Deepen the scraper's page-structure heuristics.** CTA detection, hidden-content detection, and chrome removal (see Limitations) are all heuristic, built under a 24-hour deadline rather than a full survey of how modern sites are actually structured. Studying real-world markup patterns more broadly and encoding what's learned directly into the parser would close these gaps without giving up the scraper's determinism.
+- **Split the audit into two passes:** generate insights first, then recommendations conditioned on those insights instead of producing both in a single call. This should improve recommendation quality, at twice the request cost.
 
 - **Auto-correct flagged citations instead of just marking them.** Citation verification (see Design decisions) currently flags a mismatched citation as unverified rather than fixing it — the caller still sees it, just labeled untrustworthy. Re-calling the model with the specific discrepancy as feedback could recover a corrected citation instead, at the cost of a second request against the free-tier quota.
 
-- **Validate prompt injection in code, not just in the prompt.** The current defense is a system-prompt rule telling the model to treat page content as data rather than instructions. Since the tool audits arbitrary third-party webpages, a malicious page can deliberately include prompt-injection attempts. A more robust approach would scan scraped content for known injection patterns before it reaches the model and flag outputs that look suspiciously influenced, rather than relying solely on prompt instructions.
-
-- **Split the audit into two passes:** generate insights first, then recommendations conditioned on those insights instead of producing both in a single call. This should improve recommendation quality, at twice the request cost.
-
-- **Summarize very long pages before auditing them**, if truncation proves to be a practical limitation. A larger-context model could first compress the page, with the existing model auditing that summary instead of a truncated slice. This would work better with a migration to a larger model as mentioned in the first point.
-
-- **Cache the system prompt.** `SYSTEM_PROMPT` is several thousand characters and identical on every call, but it's currently sent and reprocessed in full each time. Gemini's prompt/context-caching API would let it be cached once and reused across requests, cutting input-token cost on every audit, not just repeated ones.
-
 - **Headless-browser fallback for JS-rendered pages.** The scraper currently uses a plain HTTP client, so JavaScript-rendered pages and bot-protection interstitials often contain little or no useful content. Falling back to a headless browser (e.g. Playwright) when a page appears empty or fails to fetch would significantly improve coverage, at the cost of additional dependencies, latency, and resource usage.
 
-- **Smarter 429 handling.** Gemini distinguishes temporary rate limiting from daily quota exhaustion. Retrying only temporary throttling while failing fast on exhausted daily quotas would improve reliability without unnecessary retries.
+- **Deepen the scraper's page-structure heuristics.** CTA detection, hidden-content detection, and chrome removal (see Limitations) are all heuristic, built under a 24-hour deadline rather than a full survey of how modern sites are actually structured. Studying real-world markup patterns more broadly and encoding what's learned directly into the parser would close these gaps without giving up the scraper's determinism.
 
-- **SSRF hardening and response size limits.** The current implementation fetches any user-supplied URL without restricting destination IPs or limiting response size. Before deployment as a public service, it should restrict requests to safe destinations and enforce a maximum response size.
+- **Validate prompt injection in code, not just in the prompt.** The current defense is a system-prompt rule telling the model to treat page content as data rather than instructions. Since the tool audits arbitrary third-party webpages, a malicious page can deliberately include prompt-injection attempts. A more robust approach would scan scraped content for known injection patterns before it reaches the model and flag outputs that look suspiciously influenced, rather than relying solely on prompt instructions.
 
-- **Rate limiting on `/audit`.** The endpoint currently accepts requests at any rate, so a single caller could exhaust the shared Gemini free-tier quota or hosting credit. A per-IP request limit would bound that exposure without affecting normal use.
-
-- **Expose this as an MCP server.** `/audit` already returns clean, schema-validated JSON (facts, insights, recommendations) with no free-form text to parse — a natural fit for an MCP tool. Once the API is hardened for production use, wrapping it as an MCP server would let other AI agents (e.g. one building or reviewing a website) call it mid-workflow, instead of it only being reachable through the web UI or a manual API call.
+Smaller items, not detailed here: caching `SYSTEM_PROMPT` (identical on every call) to cut
+input-token cost, retrying only temporary 429 throttling while failing fast on an exhausted
+daily quota, SSRF restrictions and a response size cap on the fetcher, and per-IP rate limiting
+on `/audit` so one caller can't drain the shared quota.

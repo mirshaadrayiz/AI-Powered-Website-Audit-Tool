@@ -16,14 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _cited_value_matches(value, claimed: str) -> bool:
-    """Whether a citation's value matches the real one, in either form a model copies it.
-
-    The metrics block in the prompt is JSON, so a list reaches the model as
-    ["h1", "h2"] and a string reaches it quoted — json.dumps reproduces both,
-    with ensure_ascii=False since the prompt carries literal UTF-8 (a curly
-    quote in a meta title must not be compared against a \\u escape). Models
-    also cite scalars bare, so str() is accepted too.
-    """
+    """Whether a citation's value matches the real one, in either form a model copies it."""
     return claimed in (str(value), json.dumps(value, ensure_ascii=False))
 
 
