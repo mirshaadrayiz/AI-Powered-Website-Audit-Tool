@@ -45,10 +45,7 @@ async def generate_structured(system_prompt: str, user_prompt: str, schema: type
     schema-violating output up to MAX_ATTEMPTS with exponential backoff, so a
     single bad response or transient upstream hiccup doesn't fail the whole
     audit. 429s are not retried since on a rate-limited free-tier quota a
-    retry has no chance of succeeding before the quota resets. Raises AIError
-    once retries are exhausted or on a non-retryable failure. Only successful
-    calls are logged to logs/ — a failed attempt has no structured output to
-    show, and the exception itself already surfaces the failure.
+    retry has no chance of succeeding before the quota resets.
     """
     attempt = 0
     while True:

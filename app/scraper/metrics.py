@@ -3,7 +3,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
 from app.schemas import FactualMetricsSchema, HeadingCountsSchema
-from app.scraper.parser import extract_visible_text, strip_chrome
+from app.scraper.parser import text_from_scope
 
 # Class-name conventions used across most site frameworks/themes (Bootstrap,
 # Tailwind, WordPress) to mark an anchor as a styled action button rather
@@ -17,7 +17,7 @@ NON_NAVIGATIONAL_SCHEMES = ("#", "mailto:", "tel:", "javascript:")
 
 
 def _word_count(soup: BeautifulSoup) -> int:
-    return len(extract_visible_text(soup).split())
+    return len(text_from_scope(soup).split())
 
 
 def _heading_counts(soup: BeautifulSoup) -> HeadingCountsSchema:
@@ -52,10 +52,9 @@ def _normalize_netloc(netloc: str) -> str:
 def _count_links(soup: BeautifulSoup, source_url: str) -> tuple[int, int, int, int]:
     """Return (internal, external, unique internal, unique external).
 
-    internal/external count every navigational <a> tag instance; the unique_*
-    counts are deduplicated by resolved destination (fragment ignored), so a
-    link repeated across a title, a thumbnail, and a duplicate mobile/desktop
-    nav only counts once toward "how many distinct places this page links to."
+    internal/external count every navigational <a> tag instance; unique_*
+    dedupes by resolved destination (fragment ignored), so the same link
+    repeated in multiple places on the page only counts once.
     """
     source_netloc = _normalize_netloc(urlparse(source_url).netloc)
     internal = 0
@@ -65,7 +64,7 @@ def _count_links(soup: BeautifulSoup, source_url: str) -> tuple[int, int, int, i
 
     for a in soup.find_all("a", href=True):
         href = a["href"].strip()
-        if not href or href.startswith(NON_NAVIGATIONAL_SCHEMES):
+        if not href or href.lower().startswith(NON_NAVIGATIONAL_SCHEMES):
             continue
 
         resolved = urlparse(urljoin(source_url, href))
@@ -107,24 +106,14 @@ def _meta_description(soup: BeautifulSoup) -> str:
     return ""
 
 
-def extract_metrics(soup: BeautifulSoup, source_url: str) -> FactualMetricsSchema:
-    """Compute deterministic, reproducible page metrics from a parsed DOM.
-
-    Every metric is computed from the same chrome-stripped copy of the page
-    (see strip_chrome), so heading sequence, link/image/CTA counts, and word
-    count all describe this page's own content — nav and footer, repeated
-    on every page of the site, are excluded from all of them.
-
-    No model calls here — every field is a plain count or string pulled
-    straight from the markup, so the same page always yields the same
-    numbers.
-    """
-    content_soup = strip_chrome(soup)
-
+def extract_metrics(content_soup: BeautifulSoup, source_url: str) -> FactualMetricsSchema:
+    """Compute deterministic, reproducible page metrics from an already-scoped DOM."""
     internal_links, external_links, unique_internal_links, unique_external_links = _count_links(
         content_soup, source_url
     )
     image_count, missing_alt_count, decorative_alt_count = _image_stats(content_soup)
+    meta_title = _meta_title(content_soup)
+    meta_description = _meta_description(content_soup)
 
     return FactualMetricsSchema(
         total_word_count=_word_count(content_soup),
@@ -137,6 +126,8 @@ def extract_metrics(soup: BeautifulSoup, source_url: str) -> FactualMetricsSchem
         image_count=image_count,
         image_missing_alt_count=missing_alt_count,
         image_decorative_alt_count=decorative_alt_count,
-        meta_title=_meta_title(content_soup),
-        meta_description=_meta_description(content_soup),
+        meta_title=meta_title,
+        meta_title_length=len(meta_title),
+        meta_description=meta_description,
+        meta_description_length=len(meta_description),
     )
